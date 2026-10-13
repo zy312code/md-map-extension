@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>文档地图 · 浏览器测试</title>
+<link rel="stylesheet" href="../media/app.css">
+</head>
+<!-- 模拟 VS Code 网页面板：用 fetch 读取仓库文件代替插件主进程，仅用于开发调试 -->
+<body class="vscode-light">
+<div id="app"></div>
+<script src="../media/vendor/marked.min.js"></script>
+<script src="../media/vendor/highlight.min.js"></script>
+<script src="../core/mdmap-core.js"></script>
+<script src="../core/mdmap-arch.js"></script>
+<script>
+  const ROOT = new URL("../../", location.href).href.replace(/\/$/, "");
+  const project = new MdmapCore.Project(marked, "nanobot-main");
+  window.__hostLog = [];
+  const send = m => window.postMessage(m, "*");
+  const fileUrl = p => ROOT + "/" + p.split("/").map(encodeURIComponent).join("/");
+  let code = [];
+  const rebuild = () => { project.rebuild(); project.setSystem(MdmapArch.inferModules(project.docs, code)); };
+  const loaded = (async () => {
+    const cfg = await fetch(ROOT + "/.mdmap.json");
+    project.setConfig(cfg.ok ? await cfg.text() : null);
+    const list = await (await fetch("files.json")).json();
+    code = (await (await fetch("code.json")).json()).filter(p => !project.excluded(p));
+    await Promise.all(list.map(async f => project.upsert(f.path, await (await fetch(fileUrl(f.path))).text(), f)));
+    rebuild();
+  })();
+  const mt = { provider: "DeepL", job: null };
+  function init(changes) {
+    send({ type: "init", projects: [{ index: 0, name: project.name }], active: 0, snapshot: project.snapshot(),
+      assetBase: ROOT, changes, lang: localStorage.getItem("lang") || "zh", group: localStorage.getItem("group") || "sys", mt });
+  }
+  // 模拟机器翻译：标题加“（模拟译文）”，带上与插件相同的机器翻译标记
+  async function fakeTranslate(paths) {
+    for (const [i, p] of paths.entries()) {
+      mt.job = { done: i, total: paths.length, path: p };
+      send({ type: "mt", mt });
+      await new Promise(r => setTimeout(r, 600));
+      const d = project.docs.get(p);
+      const text = (d.front ? `---\n${d.front}\n---\n` : "") + MdmapCore.formatMtMark("deepl", MdmapCore.contentHash(d.content)) + "\n" +
+        d.body.replace(/^(#{1,6} .*)$/gm, "$1（模拟译文）");
+      __sim.write(project.transDir + p, text);
+    }
+    mt.job = null;
+    send({ type: "mt", mt });
+  }
+  async function host(m) {
+    window.__hostLog.push(m);
+    if (m.type === "ready") { await loaded; init({ reset: true }); }
+    else if (m.type === "open") send({ type: "doc", path: m.path, payload: project.docPayload(m.path) });
+    else if (m.type === "search") send({ type: "searchResult", q: m.q, full: m.full, hits: project.search(m.q, m.full) });
+    else if (m.type === "lang") localStorage.setItem("lang", m.lang);
+    else if (m.type === "group") localStorage.setItem("group", m.group);
+    else if (m.type === "translate") fakeTranslate([m.path]);
+    else if (m.type === "translateAll") fakeTranslate([...project.docs.keys()].filter(p => !project.zh.has(p)));
+  }
+  window.acquireVsCodeApi = () => ({
+    postMessage: m => setTimeout(() => host(m)),
+    getState: () => JSON.parse(sessionStorage.getItem("state") || "null"),
+    setState: s => sessionStorage.setItem("state", JSON.stringify(s)),
+  });
+  // 模拟文件变化：__sim.write("docs/x.md", "# X") / __sim.remove("docs/x.md")
+  window.__sim = {
+    write(path, text) {
+      const r = project.upsert(path, text, { size: text.length, mtime: Date.now() });
+      rebuild();
+      init({ added: r === "added" ? [path] : [], changed: r === "changed" ? [path] : [], removed: [], zh: r && r.zh ? [r.zh] : [] });
+    },
+    remove(path) {
+      const r = project.remove(path);
+      rebuild();
+      init({ added: [], changed: [], removed: r.removed, zh: r.zhKeys });
+    },
+  };
+</script>
+<script src="../media/app.js"></script>
+</body>
+</html>

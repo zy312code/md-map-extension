@@ -1,0 +1,93 @@
+{
+  "name": "md-map",
+  "displayName": "MD 文档地图",
+  "description": "扫描工作区中的 Markdown 文档，按文档内容归纳出系统模块架构，点击模块或文档查看详情、所属关系、引用关系与失效链接。",
+  "version": "0.3.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Visualization", "Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished", "onWebviewPanel:mdmap.panel"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "受限模式下可以浏览结构图和阅读文档；机器翻译会写入译文文件并把文档内容发送给翻译服务，需要先信任此工作区。"
+    }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "mdmap.open", "title": "打开文档地图", "category": "MD 文档地图", "icon": "$(type-hierarchy)" },
+      { "command": "mdmap.refresh", "title": "重新扫描", "category": "MD 文档地图", "icon": "$(refresh)" },
+      { "command": "mdmap.showBroken", "title": "查看失效链接", "category": "MD 文档地图", "icon": "$(warning)" },
+      { "command": "mdmap.revealDoc", "title": "在文档地图中查看", "category": "MD 文档地图", "icon": "$(type-hierarchy)" },
+      { "command": "mdmap.openSource", "title": "打开源文件", "category": "MD 文档地图", "icon": "$(go-to-file)" },
+      { "command": "mdmap.configureTranslation", "title": "配置机器翻译", "category": "MD 文档地图", "icon": "$(key)" },
+      { "command": "mdmap.translateDoc", "title": "机器翻译此文档", "category": "MD 文档地图", "icon": "$(globe)" },
+      { "command": "mdmap.translateAll", "title": "机器翻译全部文档", "category": "MD 文档地图", "icon": "$(globe)" },
+      { "command": "mdmap.groupBySystem", "title": "按系统模块分组", "category": "MD 文档地图", "icon": "$(symbol-module)" },
+      { "command": "mdmap.groupByDir", "title": "按目录分组", "category": "MD 文档地图", "icon": "$(list-tree)" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "mdmap", "title": "MD 文档地图", "icon": "media/icon.svg" }
+      ]
+    },
+    "views": {
+      "mdmap": [
+        { "id": "mdmap.tree", "name": "文档结构" }
+      ]
+    },
+    "viewsWelcome": [
+      { "view": "mdmap.tree", "contents": "当前工作区没有找到 Markdown 文档。\n[打开文档地图](command:mdmap.open)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "mdmap.open", "when": "view == mdmap.tree", "group": "navigation@1" },
+        { "command": "mdmap.showBroken", "when": "view == mdmap.tree", "group": "navigation@2" },
+        { "command": "mdmap.refresh", "when": "view == mdmap.tree", "group": "navigation@3" },
+        { "command": "mdmap.groupByDir", "when": "view == mdmap.tree && mdmap.group != dir", "group": "navigation@0" },
+        { "command": "mdmap.groupBySystem", "when": "view == mdmap.tree && mdmap.group == dir", "group": "navigation@0" },
+        { "command": "mdmap.translateAll", "when": "view == mdmap.tree", "group": "mt@1" },
+        { "command": "mdmap.configureTranslation", "when": "view == mdmap.tree", "group": "mt@2" }
+      ],
+      "view/item/context": [
+        { "command": "mdmap.openSource", "when": "view == mdmap.tree && viewItem == doc", "group": "inline" },
+        { "command": "mdmap.translateDoc", "when": "view == mdmap.tree && viewItem == doc", "group": "mt@1" }
+      ],
+      "explorer/context": [
+        { "command": "mdmap.revealDoc", "when": "resourceExtname =~ /^\\.(md|markdown)$/i", "group": "navigation@90" },
+        { "command": "mdmap.translateDoc", "when": "resourceExtname =~ /^\\.(md|markdown)$/i", "group": "navigation@91" }
+      ],
+      "editor/title": [
+        { "command": "mdmap.revealDoc", "when": "resourceLangId == markdown", "group": "navigation@90" }
+      ],
+      "commandPalette": [
+        { "command": "mdmap.openSource", "when": "false" }
+      ]
+    },
+    "configuration": {
+      "title": "MD 文档地图",
+      "properties": {
+        "mdmap.openOnViewShow": {
+          "type": "boolean",
+          "default": true,
+          "description": "点击活动栏中的“MD 文档地图”图标时，自动打开结构图页面。"
+        },
+        "mdmap.exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "额外排除的 glob 模式（相对于工作区根目录），与 files.exclude 及 .mdmap.json 中的 ignore 合并生效。"
+        },
+        "mdmap.translate.provider": {
+          "type": "string",
+          "enum": ["", "deepl", "baidu", "youdao"],
+          "enumItemLabels": ["未配置", "DeepL", "百度翻译", "有道智云"],
+          "default": "",
+          "markdownDescription": "机器翻译使用的服务。密钥保存在系统凭据存储中，请通过命令 **MD 文档地图: 配置机器翻译** 设置。译文写入 `.mdmap.json` 中 `translations.zh` 指定的目录（未配置时为 `.mdmap/zh/`）。"
+        }
+      }
+    }
+  }
+}
