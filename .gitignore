@@ -1,0 +1,3 @@
+*.vsix
+dev/files.json
+dev/code.json
